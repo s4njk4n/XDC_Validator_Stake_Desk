@@ -677,10 +677,22 @@ async function copyText(t, btn){
 
 /* ================= RPC ================= */
 let rpcId = 1;
-async function postRpc(url, body){
-  const r = await fetch(url, { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify(body) });
-  if (!r.ok) throw new Error("RPC returned HTTP " + r.status);
-  return r.json();
+// Retries rate limits (429), server errors and dropped connections with backoff.
+async function postRpc(url, body, tries = 4){
+  let err;
+  for (let i = 0; i < tries; i++){
+    try {
+      const r = await fetch(url, { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify(body) });
+      if (r.ok) return await r.json();
+      err = new Error(r.status === 429 ? "the RPC is rate-limiting requests (HTTP 429)" : "RPC returned HTTP " + r.status);
+      if (r.status !== 429 && r.status < 500) throw err;
+    } catch (e){
+      err = e;
+      if (e.message && e.message.startsWith("RPC returned HTTP 4")) throw e;
+    }
+    await sleep(500 * 2 ** i);
+  }
+  throw err;
 }
 // Reads go to the chosen RPC. If it can't be reached from the browser, fall back to the connected wallet on the same chain.
 async function rpc(method, params = []){
@@ -696,28 +708,67 @@ async function rpc(method, params = []){
 }
 const call = (data, from) => rpc("eth_call", [{ to:VALIDATOR, data, ...(from ? { from } : {}) }, "latest"]);
 
+// Reads one value per candidate (several hundred calls). Public RPCs often limit request rates or
+// refuse JSON-RPC batches, so: try small batches, retry failed items one by one with backoff,
+// and drop to limited-concurrency single calls if batching isn't supported at all.
+async function callRetry(data, tries = 5){
+  let err;
+  for (let i = 0; i < tries; i++){
+    try { return await call(data); }
+    catch (e){ err = e; await sleep(400 * 2 ** i); }
+  }
+  throw err;
+}
 async function multiCall(datas, onProgress){
   const out = new Array(datas.length); let done = 0, batchOK = true;
-  const chunk = 40;
+  const tick = n => { done += n; onProgress && onProgress(done, datas.length); };
+  const chunk = 20;
   for (let s = 0; s < datas.length; s += chunk){
     const slice = datas.slice(s, s + chunk);
+    let pending = slice.map((d, i) => i);
     if (batchOK){
       try {
         const body = slice.map((d, i) => ({ jsonrpc:"2.0", id:s + i + 1, method:"eth_call", params:[{ to:VALIDATOR, data:d }, "latest"] }));
         const res = await postRpc(S.rpcUrl, body);
-        if (!Array.isArray(res)) throw 0;
-        const byId = new Map(res.map(r => [r.id, r]));
-        slice.forEach((_, i) => { const r = byId.get(s + i + 1); if (!r || r.error) throw 0; out[s + i] = r.result; });
-        done += slice.length; onProgress && onProgress(done, datas.length); continue;
-      } catch { batchOK = false; }
+        if (!Array.isArray(res)) throw new Error("batch not supported");
+        const byId = new Map(res.map(r => [Number(r.id), r]));
+        pending = [];
+        slice.forEach((_, i) => {
+          const r = byId.get(s + i + 1);
+          if (r && !r.error && typeof r.result === "string") out[s + i] = r.result; else pending.push(i);
+        });
+        tick(slice.length - pending.length);
+        if (pending.length === slice.length && s === 0) batchOK = false;   // every item failed: treat batching as unsupported
+      } catch { batchOK = false; pending = slice.map((d, i) => i); }
     }
-    for (let i = 0; i < slice.length; i += 6){
-      const part = slice.slice(i, i + 6);
-      (await Promise.all(part.map(d => call(d)))).forEach((v, k) => out[s + i + k] = v);
-      done += part.length; onProgress && onProgress(done, datas.length);
+    for (let k = 0; k < pending.length; k += 4){
+      const part = pending.slice(k, k + 4);
+      const vals = await Promise.all(part.map(i => callRetry(slice[i])));
+      part.forEach((i, j) => out[s + i] = vals[j]);
+      tick(part.length);
     }
   }
   return out;
+}
+
+// Candidate stakes are cached briefly so repeated look-ups and refreshes don't re-read every candidate.
+let capCache = null;
+async function candidateCaps(onProgress, force){
+  const key = S.chainId + "|" + S.rpcUrl;
+  if (!force && capCache && capCache.key === key && Date.now() - capCache.time < 60000) return capCache.rows;
+  if (!force && capCache && capCache.key === key && capCache.inflight) return capCache.inflight;
+  const inflight = (async () => {
+    const raw = decArray(await callRetry(SEL.getCandidates), "address");
+    const list = [...new Set(raw.filter(a => !isZero(a)))];
+    const caps = await multiCall(list.map(a => SEL.getCandidateCap + encAddr(a)), onProgress);
+    return list.map((a, i) => ({ a, cap: decUint(caps[i]) })).filter(r => r.cap > 0n);
+  })();
+  capCache = { key, inflight, time:0, rows:null };
+  try {
+    const rows = await inflight;
+    if (capCache && capCache.inflight === inflight) capCache = { key, time:Date.now(), rows, inflight:null };
+    return rows;
+  } catch (e){ if (capCache && capCache.inflight === inflight) capCache = null; throw e; }
 }
 
 function currentRpcFor(id){ return (settings.rpc && settings.rpc[id]) || NETS[id].rpc; }
@@ -975,20 +1026,18 @@ function renderNode(){
   updateButtons();
 }
 let rankToken = 0;
-async function rankNode(){
+async function rankNode(force){
   const d = S.nodeData; if (!d || !d.isCandidate) return;
   const my = ++rankToken, meter = $("rankMeter"), bar = meter.firstElementChild;
   meter.hidden = false; bar.style.width = "0";
   try {
     const livePromise = loadLiveSets();
-    const raw = decArray(await call(SEL.getCandidates), "address");
-    const list = [...new Set(raw.filter(a => !isZero(a)))];
-    const caps = await multiCall(list.map(a => SEL.getCandidateCap + encAddr(a)), (n, t) => { if (my === rankToken) bar.style.width = (100 * n / t) + "%"; });
+    const all = await candidateCaps((n, t) => { if (my === rankToken) bar.style.width = (100 * n / t) + "%"; }, force);
     const live = await livePromise;
     if (my !== rankToken) return;
     d.live = live;
     // Rank among candidates that can take a slot: penalised nodes are skipped by the protocol.
-    let rows = list.map((a, i) => ({ a, cap: decUint(caps[i]) })).filter(r => r.cap > 0n);
+    let rows = all.slice();
     const before = rows.length;
     if (live) rows = rows.filter(r => !live.penalty.has(r.a) || r.a === d.addr);
     d.excluded = before - rows.length;
@@ -999,7 +1048,7 @@ async function rankNode(){
     if (d.rank && d.rank <= N && rows[N]) d.cushion = d.cap - rows[N].cap;
     renderNode();
   } catch (e){
-    $("nRankLine").textContent = "Couldn’t rank candidates right now.";
+    if (my === rankToken) $("nRankLine").textContent = `Couldn’t rank candidates: ${e.message || e}. Try again, or switch RPC under Network settings.`;
   } finally { meter.hidden = true; }
 }
 
@@ -1106,7 +1155,7 @@ async function sendTx(kind, data, value, msgId){
       await sleep(2000);
       let rc = null; try { rc = await rpc("eth_getTransactionReceipt", [hash]); } catch {}
       if (rc){
-        if (rc.status === "0x1"){ notice(msgId, "ok", `<strong>Confirmed.</strong> ${txLink(hash)}`); return hash; }
+        if (rc.status === "0x1"){ capCache = null; notice(msgId, "ok", `<strong>Confirmed.</strong> ${txLink(hash)}`); return hash; }
         notice(msgId, "error", `<strong>Failed on chain.</strong> ${revertText(kind)}<div>${txLink(hash)}</div>`); return null;
       }
     }
