@@ -912,7 +912,13 @@ async function loadLiveSets(){
     const r = await rpc("XDPoS_getMasternodesByNumber", ["latest"]);
     if (!r || !Array.isArray(r.Masternodes) || !r.Masternodes.length) return null;
     const set = arr => new Set((arr || []).map(normAddr).filter(Boolean));
-    return { epoch:r.Epoch, block:r.Number, masternodes:set(r.Masternodes), penalty:set(r.Penalty),
+    // Field names and number formats vary between XDC client versions (number, decimal or hex string, or absent).
+    const num = v => {
+      if (typeof v === "number" && isFinite(v)) return v;
+      if (typeof v === "string" && /^(0x[0-9a-f]+|\d+)$/i.test(v.trim())) return Number(BigInt(v.trim()));
+      return null;
+    };
+    return { epoch:num(r.Epoch ?? r.epoch), block:num(r.Number ?? r.number), masternodes:set(r.Masternodes), penalty:set(r.Penalty),
              protectors:set(r.Protectornodes), observers:set(r.Observernodes), standby:set(r.Standbynodes) };
   } catch { return null; }
 }
@@ -936,7 +942,9 @@ function renderNode(){
   else if (d.rank <= p.maxValidators) status = `<span class="kind kind-ok">Within the top ${p.maxValidators} by stake</span>`;
   else status = `<span class="kind kind-flare">Standby by stake</span>`;
   $("nStatus").innerHTML = status;
-  const src = d.live ? `Live status from epoch ${Number(d.live.epoch).toLocaleString()}` : (d.rank != null ? "Status estimated from stake; this RPC doesn’t share the live masternode list" : "");
+  const liveWhen = !d.live ? "" : d.live.epoch != null ? ` from epoch ${d.live.epoch.toLocaleString()}`
+                 : d.live.block != null ? ` at block ${d.live.block.toLocaleString()}` : "";
+  const src = d.live ? `Live status${liveWhen}` : (d.rank != null ? "Status estimated from stake; this RPC doesn’t share the live masternode list" : "");
   $("nRankLine").textContent = d.rank ? `${src}${src ? " · " : ""}rank ${d.rank} of ${d.total}` : (d.isCandidate ? "Ranking candidates…" : "");
   $("nRank").innerHTML = d.rank ? `${d.rank} of ${d.total}` + (d.excluded ? `<span class="sub">${d.excluded} penalised candidates left out</span>` : "") : (d.isCandidate ? "Calculating…" : "—");
   $("nSlots").innerHTML = String(p.maxValidators) + (d.live ? `<span class="sub">${d.live.masternodes.size} active this epoch</span>` : "");
