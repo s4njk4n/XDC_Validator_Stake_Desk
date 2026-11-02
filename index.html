@@ -1102,16 +1102,40 @@ function prepHtml(title, fn, args, data, value){
     ["Value", value.toString(), `In wei. Equals ${fmtXDC(value, 18)}`, value.toString()],
     ["Function", `${fn}(${args.map(a => a[0]).join(", ")})`, args.map(a => `${a[0]}: ${a[1]}`).join(" · "), null],
     ["Data", data, "Call data (hex)", data],
+    ["Gas", "Estimating…", "Gas limit in units, not XDC", null, "gas"],
   ];
-  return `<div class="txprep"><h3>${esc(title)}</h3><dl>` + rows.map(([k, v, s, c]) =>
-    `<dt>${k}</dt><dd>${esc(v)}<small>${esc(s)}</small></dd><dd>${c != null ? `<button type="button" class="copy" data-copy="${esc(c)}">Copy</button>` : ""}</dd>`).join("") +
-    `</dl><p class="hint">Network: ${NETS[S.chainId].name} (chain ID ${S.chainId}). ${S.account ? `Sign from <span class="mono">${short(S.account)}</span>. ` : ""}Use your platform’s contract-call or raw-transaction option. Gas around 150,000 is plenty.</p>` +
+  return `<div class="txprep"><h3>${esc(title)}</h3><dl>` + rows.map(([k, v, s, c, role]) =>
+    `<dt>${k}</dt><dd${role ? ` data-role="${role}"` : ""}>${esc(v)}<small>${esc(s)}</small></dd><dd>${c != null ? `<button type="button" class="copy" data-copy="${esc(c)}">Copy</button>` : ""}</dd>`).join("") +
+    `</dl><p class="hint">Network: ${NETS[S.chainId].name} (chain ID ${S.chainId}). ${S.account ? `Sign from <span class="mono">${short(S.account)}</span>. ` : ""}Use your platform’s contract-call or raw-transaction option.</p>` +
     `<div class="actions"><button type="button" class="btn btn-ghost btn-small" data-copy-json='${esc(JSON.stringify({ chainId:S.chainId, to:VALIDATOR, value:"0x" + value.toString(16), data, ...(S.account ? { from:S.account } : {}) }))}'>Copy as JSON</button></div></div>`;
 }
 function showPrep(id, html){
   const el = $(id); el.hidden = false; el.innerHTML = html;
   el.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => copyText(b.dataset.copy, b));
-  el.querySelectorAll("[data-copy-json]").forEach(b => b.onclick = () => copyText(JSON.stringify(JSON.parse(b.dataset.copyJson), null, 2), b));
+  const jsonBtn = el.querySelector("[data-copy-json]");
+  jsonBtn.onclick = () => copyText(JSON.stringify(JSON.parse(jsonBtn.dataset.copyJson), null, 2), jsonBtn);
+  estimateGasInto(el, jsonBtn);
+}
+// Live gas estimate for a prepared transaction: limit in gas units (+30% headroom) and the fee in XDC.
+async function estimateGasInto(el, jsonBtn){
+  const cell = el.querySelector('[data-role="gas"]'); if (!cell) return;
+  const tx = JSON.parse(jsonBtn.dataset.copyJson);
+  const callTx = { to:tx.to, data:tx.data, value:tx.value, ...(tx.from ? { from:tx.from } : {}) };
+  let price = null, limit = null, estimated = false;
+  try { price = BigInt(await rpc("eth_gasPrice")); } catch {}
+  try {
+    const g = BigInt(await rpc("eth_estimateGas", [callTx]));
+    limit = ((g * 13n / 10n + 999n) / 1000n) * 1000n; estimated = true;
+  } catch { limit = 150000n; }
+  if (!el.contains(cell)) return;
+  const fee = price != null ? fmtXDC(limit * price, 6) : null;
+  const gwei = price != null ? (Number(price) / 1e9).toLocaleString("en-US", { maximumFractionDigits:2 }) + " gwei" : null;
+  cell.innerHTML = `${limit.toLocaleString()} units` +
+    `<small>${estimated ? "Estimated with 30% headroom." : "Couldn’t simulate it from this address, so this is a safe ceiling."}` +
+    (fee ? ` Maximum fee about ${fee} at ${gwei}; you pay only for gas actually used.` : "") + `</small>`;
+  tx.gas = "0x" + limit.toString(16);
+  if (price != null) tx.gasPrice = "0x" + price.toString(16);
+  jsonBtn.dataset.copyJson = JSON.stringify(tx);
 }
 $("votePrepBtn").onclick = () => {
   const c = voteCheck(); if (!c.ok) return;
