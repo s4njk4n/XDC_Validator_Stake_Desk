@@ -542,7 +542,7 @@
           </div>
           <div>
             <h3>Rank is by stake, not a guarantee</h3>
-            <p>Candidates are ranked here by total stake against the <span data-p="slots">masternode</span> slots. The protocol can also leave out nodes penalised for missing blocks, so being in range by stake doesn’t guarantee a slot. Other candidates’ stakes move too, so leave a margin.</p>
+            <p>XDC’s consensus allows up to 108 masternodes, chosen by stake each epoch, and skips nodes penalised for missing blocks. When your RPC shares the live masternode list, the status shown is the real one for the current epoch. Otherwise it’s estimated from stake. Other candidates’ stakes move too, so leave a margin.</p>
           </div>
           <div>
             <h3>Your choice of RPC</h3>
@@ -593,9 +593,9 @@ const SEL = {
   getCandidates:"0x06a49fce", getCandidateCap:"0x58e7525f", getCandidateOwner:"0xb642facd",
   getVoterCap:"0x302b6872", isCandidate:"0xd51b9e93",
   getWithdrawBlockNumbers:"0x2f9c4bba", getWithdrawCap:"0x15febd68",
-  minVoterCap:"0xf8ac9dd5", minCandidateCap:"0xd55b7dff", maxValidatorNumber:"0xd09f1ab4",
-  voterWithdrawDelay:"0xa9ff959e",
+  minVoterCap:"0xf8ac9dd5", minCandidateCap:"0xd55b7dff", voterWithdrawDelay:"0xa9ff959e",
 };
+const MAX_MASTERNODES = 108;   // XDPoS consensus config, mainnet and Apothem
 const STORE_KEY = "xdc-validator-stake-desk";
 
 /* ================= State ================= */
@@ -754,11 +754,12 @@ async function applyRpc(url){
 
 /* ================= Contract parameters ================= */
 async function loadParams(){
-  const [minV, minC, maxN, delay, blk] = await Promise.all([
-    call(SEL.minVoterCap), call(SEL.minCandidateCap), call(SEL.maxValidatorNumber),
-    call(SEL.voterWithdrawDelay), rpc("eth_blockNumber"),
+  const [minV, minC, delay, blk] = await Promise.all([
+    call(SEL.minVoterCap), call(SEL.minCandidateCap), call(SEL.voterWithdrawDelay), rpc("eth_blockNumber"),
   ]);
-  S.params = { minVoter:decUint(minV), minCandidate:decUint(minC), maxValidators:Number(decUint(maxN)),
+  // The masternode limit is set by the XDPoS consensus config (MaxMasternodes = 108), not by the
+  // validator contract. The contract's maxValidatorNumber is a legacy value the protocol ignores.
+  S.params = { minVoter:decUint(minV), minCandidate:decUint(minC), maxValidators:MAX_MASTERNODES,
                voterDelay:Number(decUint(delay)), block:Number(BigInt(blk)) };
   try {
     const b = S.params.block, back = 2000;
@@ -901,26 +902,54 @@ async function loadNode(){
   const prev = S.nodeData && S.nodeData.addr === a ? S.nodeData : {};
   S.nodeData = { addr:a, isCandidate: decUint(isC) !== 0n, cap: decUint(cap), owner: decAddr(owner),
                  mine: mine === null ? null : decUint(mine), rank:prev.rank ?? null, total:prev.total ?? null,
-                 needed:prev.needed ?? null, cushion:prev.cushion ?? null };
+                 needed:prev.needed ?? null, cushion:prev.cushion ?? null, live:prev.live ?? null };
   renderNode();
+}
+
+/* Live set membership from the node's XDPoS API. Returns null if the RPC doesn't expose it. */
+async function loadLiveSets(){
+  try {
+    const r = await rpc("XDPoS_getMasternodesByNumber", ["latest"]);
+    if (!r || !Array.isArray(r.Masternodes) || !r.Masternodes.length) return null;
+    const set = arr => new Set((arr || []).map(normAddr).filter(Boolean));
+    return { epoch:r.Epoch, block:r.Number, masternodes:set(r.Masternodes), penalty:set(r.Penalty),
+             protectors:set(r.Protectornodes), observers:set(r.Observernodes), standby:set(r.Standbynodes) };
+  } catch { return null; }
+}
+function liveStatus(addr, L){
+  if (!L) return null;
+  if (L.masternodes.has(addr)) return { key:"mn", html:`<span class="kind kind-ok">Masternode this epoch</span>` };
+  if (L.penalty.has(addr)) return { key:"pen", html:`<span class="kind kind-flare">Penalised this epoch</span>` };
+  if (L.protectors.has(addr)) return { key:"prot", html:`<span class="kind kind-web">Protector node</span>` };
+  if (L.observers.has(addr)) return { key:"obs", html:`<span class="kind kind-web">Observer node</span>` };
+  return { key:"sb", html:`<span class="kind kind-flare">Standby</span>` };
 }
 function renderNode(){
   const d = S.nodeData, p = S.params; if (!d || !p) return;
   $("nodeCard").hidden = false;
   $("nCapBig").innerHTML = `${fmtNum(d.cap, 0)}<span class="unit">${sym()}</span>`;
+  const live = d.isCandidate ? liveStatus(d.addr, d.live) : null;
   let status;
   if (!d.isCandidate) status = `<span class="kind kind-flare">Not a candidate</span>`;
+  else if (live) status = live.html;
   else if (d.rank == null) status = `<span class="kind kind-quiet">Candidate</span>`;
-  else if (d.rank <= p.maxValidators) status = `<span class="kind kind-ok">In the masternode set by stake</span>`;
-  else status = `<span class="kind kind-flare">Standby</span>`;
+  else if (d.rank <= p.maxValidators) status = `<span class="kind kind-ok">Within the top ${p.maxValidators} by stake</span>`;
+  else status = `<span class="kind kind-flare">Standby by stake</span>`;
   $("nStatus").innerHTML = status;
-  $("nRankLine").textContent = d.rank ? `Rank ${d.rank} of ${d.total}` : (d.isCandidate ? "Ranking candidates…" : "");
-  $("nRank").textContent = d.rank ? `${d.rank} of ${d.total}` : (d.isCandidate ? "Calculating…" : "—");
-  $("nSlots").textContent = String(p.maxValidators);
-  if (d.rank && d.isCandidate){
+  const src = d.live ? `Live status from epoch ${Number(d.live.epoch).toLocaleString()}` : (d.rank != null ? "Status estimated from stake; this RPC doesn’t share the live masternode list" : "");
+  $("nRankLine").textContent = d.rank ? `${src}${src ? " · " : ""}rank ${d.rank} of ${d.total}` : (d.isCandidate ? "Ranking candidates…" : "");
+  $("nRank").innerHTML = d.rank ? `${d.rank} of ${d.total}` + (d.excluded ? `<span class="sub">${d.excluded} penalised candidates left out</span>` : "") : (d.isCandidate ? "Calculating…" : "—");
+  $("nSlots").innerHTML = String(p.maxValidators) + (d.live ? `<span class="sub">${d.live.masternodes.size} active this epoch</span>` : "");
+  if (live && live.key === "pen"){
+    $("nGapLabel").textContent = "Distance to the set";
+    $("nGap").innerHTML = `—<span class="sub">Penalised nodes are skipped regardless of stake until the penalty clears</span>`;
+  } else if (d.rank && d.isCandidate){
     if (d.rank <= p.maxValidators){
-      $("nGapLabel").textContent = "Lead over first standby";
-      $("nGap").innerHTML = d.cushion != null ? fmtXDC(d.cushion, 0) : "—";
+      $("nGapLabel").textContent = `Lead over rank ${p.maxValidators + 1}`;
+      $("nGap").innerHTML = d.cushion != null ? fmtXDC(d.cushion, 0) + (d.cushion === 0n ? `<span class="sub">Tied on stake with the next candidate</span>` : "") : "—";
+    } else if (live && live.key === "mn"){
+      $("nGapLabel").textContent = "Distance to the set";
+      $("nGap").innerHTML = `—<span class="sub">In the set this epoch, though outside the top ${p.maxValidators} by stake</span>`;
     } else {
       $("nGapLabel").textContent = "Needed to enter the set";
       $("nGap").innerHTML = `${fmtXDC(ceilXDC(d.needed), 0)}<span class="sub">at current stakes; leave a margin</span>`;
@@ -943,11 +972,18 @@ async function rankNode(){
   const my = ++rankToken, meter = $("rankMeter"), bar = meter.firstElementChild;
   meter.hidden = false; bar.style.width = "0";
   try {
+    const livePromise = loadLiveSets();
     const raw = decArray(await call(SEL.getCandidates), "address");
     const list = [...new Set(raw.filter(a => !isZero(a)))];
     const caps = await multiCall(list.map(a => SEL.getCandidateCap + encAddr(a)), (n, t) => { if (my === rankToken) bar.style.width = (100 * n / t) + "%"; });
+    const live = await livePromise;
     if (my !== rankToken) return;
-    const rows = list.map((a, i) => ({ a, cap: decUint(caps[i]) })).filter(r => r.cap > 0n);
+    d.live = live;
+    // Rank among candidates that can take a slot: penalised nodes are skipped by the protocol.
+    let rows = list.map((a, i) => ({ a, cap: decUint(caps[i]) })).filter(r => r.cap > 0n);
+    const before = rows.length;
+    if (live) rows = rows.filter(r => !live.penalty.has(r.a) || r.a === d.addr);
+    d.excluded = before - rows.length;
     rows.sort((x, y) => (y.cap > x.cap) ? 1 : (y.cap < x.cap ? -1 : 0));
     const idx = rows.findIndex(r => r.a === d.addr), N = S.params.maxValidators;
     d.total = rows.length; d.rank = idx >= 0 ? idx + 1 : null; d.needed = null; d.cushion = null;
