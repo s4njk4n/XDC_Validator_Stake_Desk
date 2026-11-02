@@ -779,6 +779,8 @@ function renderRpcField(){
     ? `${NETS[S.chainId].rpcNote} ${S.chainId === 50 ? 'Need a private or dedicated endpoint? See <a href="/go/plugin-rpc/?from=stake-desk-settings" data-goatcounter-click="referral/plugin-rpc/stake-desk-settings">Plugin’s RPC plans</a>.' : ""}`
     : `Custom endpoint, saved in this browser. <button type="button" class="copy" id="rpcReset">Reset to default</button>`;
   const r = $("rpcReset"); if (r) r.onclick = () => applyRpc(def);
+  // GoatCounter binds click tracking once at load; re-bind so the re-rendered Plugin link is still counted.
+  try { window.goatcounter && window.goatcounter.bind_events && window.goatcounter.bind_events(); } catch {}
 }
 async function applyRpc(url){
   url = (url || "").trim();
