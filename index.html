@@ -242,7 +242,7 @@
     .txprep dl { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 0.45rem 0.75rem; margin: 0; align-items: start; }
     .txprep dt { color: var(--mist); font-size: 0.875rem; font-weight: 600; padding-top: 0.15rem; }
     .txprep dd { margin: 0; font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
-    .txprep dd small { display: block; font-family: var(--body); color: var(--mist); font-size: 0.8rem; }
+    .txprep dd small { display: block; font-family: var(--body); color: var(--mist); font-size: 0.8rem; word-break: normal; overflow-wrap: break-word; }
     .copy { font: inherit; font-size: 0.8rem; font-weight: 600; color: var(--signal); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0.15rem 0.5rem; cursor: pointer; }
     .copy:hover { border-color: var(--signal); }
 
@@ -1099,15 +1099,16 @@ function updateButtons(){
 function prepHtml(title, fn, args, data, value){
   const rows = [
     ["To", toXdc(VALIDATOR), `${VALIDATOR} · XDC validator contract`, VALIDATOR],
-    ["Value", value.toString(), `In wei. Equals ${fmtXDC(value, 18)}`, value.toString()],
+    ["Amount", plainXDC(value), `In ${sym()}, for screens that ask for an amount rather than wei`, plainXDC(value)],
+    ["Value", value.toString(), "The same amount in wei (1 XDC = 10¹⁸ wei)", value.toString()],
     ["Function", `${fn}(${args.map(a => a[0]).join(", ")})`, args.map(a => `${a[0]}: ${a[1]}`).join(" · "), null],
     ["Data", data, "Call data (hex)", data],
     ["Gas", "Estimating…", "Gas limit in units, not XDC", null, "gas"],
   ];
   return `<div class="txprep"><h3>${esc(title)}</h3><dl>` + rows.map(([k, v, s, c, role]) =>
     `<dt>${k}</dt><dd${role ? ` data-role="${role}"` : ""}>${esc(v)}<small>${esc(s)}</small></dd><dd>${c != null ? `<button type="button" class="copy" data-copy="${esc(c)}">Copy</button>` : ""}</dd>`).join("") +
-    `</dl><p class="hint">Network: ${NETS[S.chainId].name} (chain ID ${S.chainId}). ${S.account ? `Sign from <span class="mono">${short(S.account)}</span>. ` : ""}Use your platform’s contract-call or raw-transaction option.</p>` +
-    `<div class="actions"><button type="button" class="btn btn-ghost btn-small" data-copy-json='${esc(JSON.stringify({ chainId:S.chainId, to:VALIDATOR, value:"0x" + value.toString(16), data, ...(S.account ? { from:S.account } : {}) }))}'>Copy as JSON</button></div></div>`;
+    `</dl><p class="hint">Network: ${NETS[S.chainId].name} (chain ID ${S.chainId}). ${S.account ? `Sign from <span class="mono">${short(S.account)}</span>. ` : ""}Most custody platforms take a contract call as separate fields: destination (To), amount and call data (Data). The JSON is the standard Ethereum transaction object, for APIs and scripts.</p>` +
+    `<div class="actions"><button type="button" class="btn btn-ghost btn-small" data-copy-json='${esc(JSON.stringify({ chainId:"0x" + S.chainId.toString(16), to:VALIDATOR, value:"0x" + value.toString(16), data, ...(S.account ? { from:S.account } : {}) }))}'>Copy transaction JSON</button></div></div>`;
 }
 function showPrep(id, html){
   const el = $(id); el.hidden = false; el.innerHTML = html;
