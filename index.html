@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XDC Validator Stake Desk: masternode vote, unvote and withdraw | XDC Outpost</title>
+  <meta name="license" content="MIT">
+  <meta name="description" content="Stake operations for XDC masternode operators and institutional validators: vote for a candidate, unvote, and withdraw after the unlock period, directly against the XDC validator contract. Works with MetaMask or produces unsigned transactions for custody platforms.">
+  <link rel="canonical" href="https://xdcoutpost.xyz/XDC_Validator_Stake_Desk/">
+  <meta name="theme-color" content="#1E1A4A">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://xdcoutpost.xyz/XDC_Validator_Stake_Desk/">
+  <meta property="og:title" content="XDC Validator Stake Desk">
+  <meta property="og:description" content="Vote, unvote and withdraw masternode stake on XDC, with MetaMask or your custody platform.">
+  <meta property="og:image" content="https://xdcoutpost.xyz/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@s4njk4n">
+
+  <link rel="preload" href="/assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin>
+
+  <style>
+    @font-face {
+      font-family: "Bricolage";
+      src: url("/assets/fonts/bricolage.woff2") format("woff2-variations");
+      font-weight: 200 800; font-stretch: 75% 100%; font-display: swap;
+    }
+    @font-face {
+      font-family: "Instrument Sans";
+      src: url("/assets/fonts/instrument-sans.woff2") format("woff2-variations");
+      font-weight: 400 700; font-stretch: 75% 100%; font-display: swap;
+    }
+
+    /* ---- Shared XDC Outpost tokens ---- */
+    :root {
+      --night: #1E1A4A;
+      --deep: #19163F;
+      --dusk: #2B2566;
+      --line: #443D84;
+      --ink: #F2EDFF;
+      --mist: #C3B8EA;
+      --signal: #8FDCFF;
+      --flare: #FF9EBB;
+      --ok: #6EE7B7;
+      --display: "Bricolage", "Avenir Next", "Segoe UI", sans-serif;
+      --body: "Instrument Sans", "Helvetica Neue", "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --wrap: 72rem;
+      --gutter: clamp(1.25rem, 4vw, 2.5rem);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    body {
+      margin: 0; background: var(--night); color: var(--ink);
+      font-family: var(--body); font-size: 1.0625rem; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--signal); text-underline-offset: 0.2em; }
+    a:hover { color: var(--ink); }
+    :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 4px; }
+    [hidden] { display: none !important; }
+    .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter); }
+    .nb { white-space: nowrap; }
+    .mono { font-family: var(--mono); }
+    .skip { position: absolute; left: 1rem; top: -3rem; background: var(--signal); color: var(--night); padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; z-index: 20; }
+    .skip:focus { top: 1rem; }
+
+    /* Header (matches xdcoutpost.xyz) */
+    .site-header {
+      position: sticky; top: 0; z-index: 10;
+      background: rgb(30 26 74 / 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .site-header .wrap { display: flex; align-items: center; justify-content: space-between; height: 4rem; gap: 1rem; }
+    .crumbs { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+    .brand {
+      display: flex; align-items: center; gap: 0.6rem; white-space: nowrap;
+      color: var(--ink); text-decoration: none;
+      font-family: var(--display); font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em;
+    }
+    .brand svg { width: 1.6rem; height: 1.6rem; flex: none; }
+    .crumbs .sep { color: var(--line); font-size: 1.3rem; }
+    .crumbs .here { color: var(--mist); font-weight: 600; white-space: nowrap; }
+    .site-nav { display: flex; gap: clamp(1rem, 3vw, 2rem); }
+    .site-nav a { color: var(--mist); text-decoration: none; font-size: 0.95rem; font-weight: 500; white-space: nowrap; padding: 0.75rem 0; }
+    .site-nav a:hover { color: var(--ink); }
+    @media (max-width: 720px) { .site-nav .wide { display: none; } }
+    @media (max-width: 460px) { .crumbs .sep, .crumbs .here { display: none; } }
+
+    /* Hero */
+    .hero { padding: clamp(3rem, 7vw, 5rem) 0 clamp(3rem, 6vw, 4.5rem); }
+    .hero-grid { display: grid; gap: 2.5rem 4rem; }
+    @media (min-width: 1024px) { .hero-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); align-items: start; } }
+    .eyebrow { margin: 0 0 1rem; font-size: 0.875rem; font-weight: 600; color: var(--signal); letter-spacing: 0.02em; }
+    .hero h1 {
+      font-family: var(--display); font-weight: 750; font-stretch: 82%;
+      font-size: clamp(2.5rem, 6vw, 4.75rem); line-height: 0.98; letter-spacing: -0.028em;
+      margin: 0 0 1.5rem; max-width: 14ch; text-wrap: balance;
+    }
+    .hero .lede { font-size: clamp(1.1rem, 2vw, 1.25rem); color: var(--mist); margin: 0 0 1.75rem; max-width: 34em; }
+    .facts { list-style: none; margin: 0 0 2rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .kind {
+      display: inline-block; font-weight: 600; font-size: 0.8rem;
+      padding: 0.2rem 0.7rem; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap;
+    }
+    .kind-web { color: var(--signal); }
+    .kind-quiet { color: var(--mist); }
+    .kind-ok { color: var(--ok); }
+    .kind-flare { color: var(--flare); }
+    .hero .actions { margin: 0; }
+
+    .panel { background: var(--dusk); border: 1px solid var(--line); border-radius: 18px; padding: clamp(1.25rem, 3vw, 2rem); }
+    .panel h2 { font-family: var(--display); font-weight: 700; font-stretch: 90%; font-size: 1.35rem; line-height: 1.2; margin: 0 0 0.4rem; }
+    .panel > p { color: var(--mist); font-size: 0.95rem; margin: 0 0 1.25rem; }
+    .flow { display: grid; gap: 0.6rem; margin: 0; }
+    .flow .term { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0.9rem; border-radius: 8px; background: var(--night); border: 1px solid var(--line); font-size: 0.95rem; }
+    .flow .term b { font-weight: 600; }
+    .flow .term small { color: var(--mist); font-size: 0.8rem; text-align: right; }
+    .flow .op { text-align: center; color: var(--mist); font-family: var(--display); font-weight: 700; font-size: 1.1rem; line-height: 1; }
+    .flow .term.result { background: var(--signal); border-color: var(--signal); color: var(--night); }
+    .flow .term.result small { color: var(--night); opacity: 0.75; }
+    .panel .attrib { margin: 1rem 0 0; }
+
+    /* Steps: same two-column pattern as the tool catalogue */
+    .steps { background: var(--deep); padding: clamp(1rem, 3vw, 2rem) 0 clamp(3rem, 7vw, 5rem); }
+    .group { display: grid; gap: 1.5rem 3rem; grid-template-columns: 1fr; padding: 2.5rem 0; border-top: 1px solid var(--line); }
+    .group:first-child { border-top: 0; }
+    @media (min-width: 900px) {
+      .group { grid-template-columns: 17rem minmax(0, 1fr); }
+      .group-head { position: sticky; top: 6rem; align-self: start; }
+    }
+    .step-no {
+      display: inline-grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%;
+      border: 1.5px solid var(--signal); color: var(--signal);
+      font-family: var(--display); font-weight: 700; font-size: 1rem; margin-bottom: 0.75rem;
+    }
+    .group-head h2 { font-family: var(--display); font-weight: 700; font-stretch: 90%; font-size: 1.6rem; line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 0.5rem; }
+    .group-head p { color: var(--mist); margin: 0; font-size: 0.975rem; }
+    .group-body { display: grid; gap: 1.25rem; max-width: 46rem; min-width: 0; }
+
+    /* Forms */
+    .field { display: grid; gap: 0.4rem; }
+    .field label, .field .label { font-weight: 600; font-size: 0.95rem; }
+    .hint { color: var(--mist); font-size: 0.875rem; margin: 0; }
+    .row-2 { display: grid; gap: 1.25rem; }
+    @media (min-width: 640px) { .row-2 { grid-template-columns: 1fr 1fr; } }
+    .inline { display: flex; gap: 0.6rem; }
+    .inline > input { flex: 1; min-width: 0; }
+    input {
+      width: 100%; font: inherit; font-size: 1rem; color: var(--ink);
+      background: var(--night); border: 1px solid var(--line); border-radius: 8px;
+      padding: 0.75rem 0.9rem; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input.mono { font-family: var(--mono); font-size: 0.85rem; }
+    input::placeholder { color: #8E84BE; }
+    input:focus { outline: none; border-color: var(--signal); box-shadow: 0 0 0 3px rgb(143 220 255 / 0.2); }
+    input[aria-invalid="true"] { border-color: var(--flare); }
+    select {
+      width: 100%; font: inherit; font-size: 1rem; color: var(--ink); color-scheme: dark; cursor: pointer;
+      background-color: var(--night); border: 1px solid var(--line); border-radius: 8px;
+      padding: 0.75rem 2.5rem 0.75rem 0.9rem; appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='%238FDCFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 0.85rem center; background-size: 1rem;
+    }
+    select:hover { border-color: var(--signal); }
+    select:focus { outline: none; border-color: var(--signal); box-shadow: 0 0 0 3px rgb(143 220 255 / 0.2); }
+    select option { background: var(--night); color: var(--ink); }
+
+    details.settings { border: 1px solid var(--line); border-radius: 8px; padding: 0 0.9rem; }
+    details.settings summary { cursor: pointer; padding: 0.75rem 0; color: var(--mist); font-weight: 600; font-size: 0.95rem; }
+    details.settings[open] { padding-bottom: 0.9rem; }
+    details.settings .field + .field { margin-top: 1rem; }
+
+    /* Buttons (match main site) */
+    .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      padding: 0.7rem 1.2rem; border-radius: 8px; border: 1px solid transparent;
+      font: inherit; font-weight: 600; font-size: 0.975rem; text-decoration: none; white-space: nowrap; cursor: pointer;
+      transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-primary { background: var(--signal); color: var(--night); }
+    .btn-primary:hover:not([disabled]) { background: var(--ink); color: var(--night); }
+    .btn-ghost { background: transparent; border-color: var(--line); color: var(--ink); }
+    .btn-ghost:hover:not([disabled]) { border-color: var(--signal); color: var(--ink); }
+    .btn-small { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
+    .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+    .btn svg { width: 1rem; height: 1rem; fill: currentColor; flex: none; }
+
+    /* Notices */
+    .notice { margin: 0; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--line); background: var(--dusk); font-size: 0.95rem; word-break: break-word; }
+    .notice strong { font-weight: 600; }
+    .notice[data-tone="error"] { border-color: var(--flare); background: rgb(255 158 187 / 0.08); }
+    .notice[data-tone="ok"] { border-color: var(--ok); background: rgb(110 231 183 / 0.07); }
+    .notice[data-tone="warn"] { border-left: 3px solid var(--flare); }
+    .notice .hash { font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
+    .progress { display: flex; align-items: center; gap: 0.75rem; }
+    .spinner { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--signal); animation: spin 0.8s linear infinite; flex: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+    /* Wallet / connection */
+    .wallet { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 0.9rem; border: 1px solid var(--line); border-radius: 8px; background: var(--night); }
+    .wallet-state { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; min-width: 0; flex-wrap: wrap; }
+    .wallet-state .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--line); flex: none; }
+    .wallet-state.on .dot { background: var(--ok); box-shadow: 0 0 0 4px rgb(110 231 183 / 0.18); }
+    .wallet-state.watch .dot { background: var(--signal); box-shadow: 0 0 0 4px rgb(143 220 255 / 0.18); }
+    .wallet-state.bad .dot { background: var(--flare); box-shadow: 0 0 0 4px rgb(255 158 187 / 0.18); }
+    .wallet-state code { font-family: var(--mono); font-size: 0.85rem; word-break: break-all; }
+    .or { display: flex; align-items: center; gap: 0.75rem; color: var(--mist); font-size: 0.875rem; }
+    .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+    /* Node card */
+    .result-card { background: var(--dusk); border: 1px solid var(--line); border-radius: 18px; padding: clamp(1.25rem, 3vw, 2rem); display: grid; gap: 1.25rem; }
+    .result-card .label { color: var(--mist); font-weight: 600; margin: 0; font-size: 0.95rem; }
+    .status-line { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem 1rem; margin: 0.25rem 0 0; }
+    .big {
+      font-family: var(--display); font-weight: 750; font-stretch: 85%; letter-spacing: -0.025em;
+      font-size: clamp(2.25rem, 6vw, 3.5rem); line-height: 1; margin: 0; word-break: break-word;
+    }
+    .big .unit { font-size: 0.45em; color: var(--mist); font-weight: 650; margin-left: 0.3em; letter-spacing: 0; }
+    .meter { height: 0.4rem; background: var(--night); border-radius: 999px; overflow: hidden; }
+    .meter > i { display: block; height: 100%; background: var(--signal); width: 0; transition: width 0.2s; }
+    table.breakdown { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    .breakdown th, .breakdown td { padding: 0.6rem 0; border-bottom: 1px solid var(--line); text-align: left; font-weight: 400; vertical-align: top; }
+    .breakdown th { color: var(--mist); padding-right: 1rem; white-space: nowrap; }
+    .breakdown td { text-align: right; font-variant-numeric: tabular-nums; word-break: break-all; }
+    .breakdown tr:last-child th, .breakdown tr:last-child td { border-bottom: 0; }
+    .breakdown .sub { display: block; color: var(--mist); font-size: 0.8rem; word-break: normal; }
+
+    /* Amount input with suffix */
+    .amount { position: relative; }
+    .amount input { padding-right: 4.5rem; font-variant-numeric: tabular-nums; }
+    .amount .suffix { position: absolute; right: 0.9rem; top: 50%; transform: translateY(-50%); color: var(--mist); font-weight: 600; font-size: 0.9rem; pointer-events: none; }
+
+    /* Prepared (unsigned) transaction */
+    .txprep { border: 1px dashed var(--line); border-radius: 8px; padding: 0.9rem; display: grid; gap: 0.6rem; background: var(--night); }
+    .txprep h3 { font-family: var(--display); font-weight: 650; font-size: 1.05rem; margin: 0; }
+    .txprep dl { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 0.45rem 0.75rem; margin: 0; align-items: start; }
+    .txprep dt { color: var(--mist); font-size: 0.875rem; font-weight: 600; padding-top: 0.15rem; }
+    .txprep dd { margin: 0; font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
+    .txprep dd small { display: block; font-family: var(--body); color: var(--mist); font-size: 0.8rem; }
+    .copy { font: inherit; font-size: 0.8rem; font-weight: 600; color: var(--signal); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0.15rem 0.5rem; cursor: pointer; }
+    .copy:hover { border-color: var(--signal); }
+
+    /* Withdrawals */
+    table.wd { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    .wd th, .wd td { padding: 0.7rem 0.5rem 0.7rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; font-variant-numeric: tabular-nums; }
+    .wd th { color: var(--mist); font-weight: 500; font-size: 0.85rem; }
+    .wd td:last-child, .wd th:last-child { text-align: right; padding-right: 0; }
+    .wd .acts { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
+    @media (max-width: 600px) {
+      .wd thead { display: none; }
+      .wd tr { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 1rem; padding: 0.8rem 0; border-bottom: 1px solid var(--line); }
+      .wd td { border: 0; padding: 0; }
+      .wd td:last-child { grid-column: 1 / -1; text-align: left; }
+      .wd .acts { justify-content: flex-start; }
+    }
+
+    /* Things to know */
+    .know { padding: clamp(3rem, 7vw, 5rem) 0; }
+    .know h2 { font-family: var(--display); font-weight: 700; font-stretch: 90%; font-size: clamp(2rem, 4vw, 2.75rem); letter-spacing: -0.02em; line-height: 1.1; margin: 0 0 2rem; }
+    .know-grid { display: grid; gap: 1.75rem 3rem; }
+    @media (min-width: 800px) { .know-grid { grid-template-columns: 1fr 1fr; } }
+    .know h3 { font-family: var(--display); font-weight: 650; font-size: 1.2rem; margin: 0 0 0.35rem; }
+    .know p { color: var(--mist); margin: 0; }
+    .know code { font-family: var(--mono); font-size: 0.85em; color: var(--ink); word-break: break-all; }
+
+    /* Contact + footer (match main site) */
+    .contact { padding: clamp(3rem, 7vw, 5rem) 0; border-top: 1px solid var(--line); }
+    .contact .wrap { display: grid; gap: 2rem 4rem; }
+    @media (min-width: 900px) { .contact .wrap { grid-template-columns: 1fr 1fr; align-items: start; } }
+    .contact h2 { font-family: var(--display); font-weight: 700; font-stretch: 90%; font-size: clamp(2rem, 4vw, 2.75rem); letter-spacing: -0.02em; line-height: 1.1; margin: 0 0 1rem; }
+    .contact p { color: var(--mist); margin: 0; max-width: 30em; }
+    .channels { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+    .channels a { display: flex; align-items: center; gap: 1rem; padding: 1rem 0.25rem; border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+    .channels a:hover { color: var(--signal); }
+    .channels svg { width: 1.4rem; height: 1.4rem; fill: currentColor; flex: none; }
+    .channels .name { font-weight: 600; min-width: 5.5rem; }
+    .channels .handle { color: var(--mist); }
+    .site-footer { border-top: 1px solid var(--line); padding: 2rem 0; color: var(--mist); font-size: 0.9rem; }
+    .site-footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; }
+    .site-footer p { margin: 0; }
+    .site-footer a { display: inline-block; padding: 0.6rem 0; }
+    .attrib { color: var(--mist); font-size: 0.85rem; margin: 0; }
+  </style>
+  <script src="/assets/analytics.js"></script>
+</head>
+<body>
+  <a class="skip" href="#connect">Skip to the stake desk</a>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-beacon" viewBox="0 0 32 32">
+      <path d="M11 29 L16 11 L21 29 M12.6 23 H19.4 M13.8 18 H18.2" fill="none" stroke="#C3B8EA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="16" cy="7.5" r="3" fill="#FF9EBB"/>
+      <path d="M9.5 4.5 A9 9 0 0 0 9.5 10.5 M22.5 4.5 A9 9 0 0 1 22.5 10.5" fill="none" stroke="#FF9EBB" stroke-width="1.75" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.040-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol>
+    <symbol id="i-telegram" viewBox="0 0 24 24"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.910.177-.184 3.247-2.977 3.307-3.230.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.830-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></symbol>
+    <symbol id="i-discord" viewBox="0 0 24 24"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"/></symbol>
+  </svg>
+
+  <header class="site-header">
+    <div class="wrap">
+      <div class="crumbs">
+        <a class="brand" href="/"><svg aria-hidden="true"><use href="#i-beacon"/></svg>XDC Outpost</a>
+        <span class="sep" aria-hidden="true">/</span>
+        <span class="here">Validator Stake Desk</span>
+      </div>
+      <nav class="site-nav" aria-label="Main">
+        <a href="/#tools">All tools</a>
+        <a class="wide" href="#know">How it works</a>
+        <a class="wide" href="https://github.com/s4njk4n/XDC_Validator_Stake_Desk" target="_blank" rel="noopener" data-goatcounter-click="github/XDC_Validator_Stake_Desk">Source code</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="title">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow">For masternode operators and institutional validators</p>
+          <h1 id="title">Masternode stake operations on XDC</h1>
+          <p class="lede">Vote stake onto a candidate to move it from standby into the masternode set, unvote when you need to, and withdraw once the unlock period ends. Every action goes straight to the XDC validator contract, signed in MetaMask or prepared for your custody platform.</p>
+          <ul class="facts" aria-label="Key facts">
+            <li><span class="kind kind-web">Web app</span></li>
+            <li><span class="kind kind-quiet">Non-custodial</span></li>
+            <li><span class="kind kind-quiet">MetaMask or custody / multisig</span></li>
+            <li><span class="kind kind-quiet">Choose your own RPC</span></li>
+            <li><span class="kind kind-quiet">Open source</span></li>
+          </ul>
+          <div class="actions">
+            <a class="btn btn-primary" href="#connect">Open the stake desk</a>
+            <a class="btn btn-ghost" href="#know">How it works</a>
+          </div>
+        </div>
+
+        <aside class="panel" aria-labelledby="flow-title">
+          <h2 id="flow-title">The stake lifecycle</h2>
+          <p>Three contract calls, all on the system validator contract at <span class="mono nb" id="heroContract">xdc…0088</span>.</p>
+          <div class="flow">
+            <div class="term"><b>vote(candidate)</b><small>stake at least <span data-p="minVote">25,000 XDC</span></small></div>
+            <div class="op" aria-hidden="true">↓</div>
+            <div class="term"><b>unvote(candidate, amount)</b><small>locks for <span data-p="delay">the unlock period</span></small></div>
+            <div class="op" aria-hidden="true">↓</div>
+            <div class="term result"><b>withdraw(block, index)</b><small>XDC back to the staking address</small></div>
+          </div>
+          <p class="attrib">Figures are read live from the contract on the network you choose.</p>
+        </aside>
+      </div>
+    </section>
+
+    <div class="steps">
+      <div class="wrap">
+
+        <!-- 1. Connect -->
+        <section class="group" id="connect" aria-labelledby="connect-title">
+          <div class="group-head">
+            <span class="step-no">1</span>
+            <h2 id="connect-title">Staking address</h2>
+            <p>Connect MetaMask to sign here, or watch the address your custody platform controls and sign elsewhere.</p>
+          </div>
+          <div class="group-body">
+            <div class="wallet">
+              <div class="wallet-state" id="walletState"><span class="dot" aria-hidden="true"></span><span id="walletText">Not connected</span></div>
+              <div class="actions">
+                <button type="button" class="btn btn-ghost btn-small" id="switchBtn" hidden>Switch network</button>
+                <button type="button" class="btn btn-ghost btn-small" id="disconnectBtn" hidden>Disconnect</button>
+                <button type="button" class="btn btn-primary btn-small" id="connectBtn" data-goatcounter-click="stake-desk/connect">Connect MetaMask</button>
+              </div>
+            </div>
+            <p class="notice" id="noWallet" data-tone="warn" hidden>No browser wallet found. Install <a href="https://metamask.io/download/" target="_blank" rel="noopener">MetaMask</a>, open this page <a id="mmDeepLink" href="#">in the MetaMask mobile app</a>, or watch your address below and sign elsewhere.</p>
+
+            <div class="or">or</div>
+
+            <div class="field">
+              <label for="watchIn">Watch an address (read-only)</label>
+              <div class="inline">
+                <input type="text" id="watchIn" class="mono" placeholder="xdc… staking address held in custody or multisig" autocomplete="off" spellcheck="false">
+                <button type="button" class="btn btn-ghost" id="watchBtn">Watch</button>
+              </div>
+              <p class="hint">Shows the stake and pending withdrawals for that address, and prepares each transaction for you to sign in your custody platform. No keys are involved.</p>
+            </div>
+
+            <details class="settings" id="netSettings">
+              <summary>Network settings</summary>
+              <div class="field">
+                <label for="netSel">Network</label>
+                <select id="netSel">
+                  <option value="50">XDC Mainnet (chain 50)</option>
+                  <option value="51">XDC Apothem Testnet (chain 51)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="rpcIn">RPC endpoint</label>
+                <div class="inline">
+                  <input type="url" id="rpcIn" class="mono" spellcheck="false" autocomplete="off">
+                  <button type="button" class="btn btn-ghost" id="rpcBtn">Use</button>
+                </div>
+                <p class="hint" id="rpcHint"></p>
+              </div>
+              <p class="notice" id="rpcStatus" role="status" hidden></p>
+            </details>
+          </div>
+        </section>
+
+        <!-- 2. Node -->
+        <section class="group" id="node" aria-labelledby="node-title">
+          <div class="group-head">
+            <span class="step-no">2</span>
+            <h2 id="node-title">Candidate node</h2>
+            <p>Enter the node’s candidate (coinbase) address to see its stake, rank and how far it is from a masternode slot.</p>
+          </div>
+          <div class="group-body">
+            <div class="field">
+              <label for="nodeIn">Candidate address</label>
+              <div class="inline">
+                <input type="text" id="nodeIn" class="mono" placeholder="xdc… or 0x…" autocomplete="off" spellcheck="false">
+                <button type="button" class="btn btn-primary" id="lookupBtn">Look up</button>
+              </div>
+            </div>
+            <p class="notice" id="nodeMsg" hidden></p>
+
+            <div class="result-card" id="nodeCard" hidden>
+              <div>
+                <p class="label">Total stake on this candidate</p>
+                <p class="big" id="nCapBig">0<span class="unit">XDC</span></p>
+                <div class="status-line">
+                  <span id="nStatus"></span>
+                  <span class="hint" id="nRankLine"></span>
+                </div>
+              </div>
+              <div class="meter" id="rankMeter" hidden><i></i></div>
+              <table class="breakdown" aria-label="Candidate details">
+                <tbody>
+                  <tr><th>Rank by stake</th><td id="nRank">—</td></tr>
+                  <tr><th>Masternode slots</th><td id="nSlots">—</td></tr>
+                  <tr><th id="nGapLabel">Distance to the set</th><td id="nGap">—</td></tr>
+                  <tr><th>Your stake on this node</th><td id="nMine">—</td></tr>
+                  <tr><th>Node owner</th><td class="mono" id="nOwner" style="font-size:.85rem">—</td></tr>
+                </tbody>
+              </table>
+              <div class="actions">
+                <button type="button" class="btn btn-ghost btn-small" id="copyLinkBtn">Copy link to this node</button>
+                <a class="btn btn-ghost btn-small" id="nodeExplorer" target="_blank" rel="noopener" href="#">View on XDCScan</a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Vote -->
+        <section class="group" id="vote" aria-labelledby="vote-title">
+          <div class="group-head">
+            <span class="step-no">3</span>
+            <h2 id="vote-title">Vote</h2>
+            <p>Add stake to the candidate. Each vote must be at least <span data-p="minVote">the minimum</span>, including top-ups.</p>
+          </div>
+          <div class="group-body">
+            <div class="field">
+              <label for="voteAmt">Amount to vote</label>
+              <div class="amount"><input type="text" id="voteAmt" inputmode="decimal" placeholder="25000" autocomplete="off"><span class="suffix" data-sym>XDC</span></div>
+              <p class="hint" id="voteHint">Look up a candidate first.</p>
+            </div>
+            <div class="actions">
+              <button type="button" class="btn btn-primary" id="voteBtn" disabled>Vote with MetaMask</button>
+              <button type="button" class="btn btn-ghost" id="votePrepBtn" disabled>Prepare unsigned transaction</button>
+            </div>
+            <div id="votePrep" hidden></div>
+            <p class="notice" id="voteMsg" hidden></p>
+          </div>
+        </section>
+
+        <!-- 4. Unvote -->
+        <section class="group" id="unvote" aria-labelledby="unvote-title">
+          <div class="group-head">
+            <span class="step-no">4</span>
+            <h2 id="unvote-title">Unvote</h2>
+            <p>Take stake back from the candidate. It stays locked in the contract for <span data-p="delay">the unlock period</span>, then appears under Withdraw.</p>
+          </div>
+          <div class="group-body">
+            <div class="field">
+              <label for="unvoteAmt">Amount to unvote</label>
+              <div class="inline">
+                <div class="amount" style="flex:1"><input type="text" id="unvoteAmt" inputmode="decimal" placeholder="0" autocomplete="off"><span class="suffix" data-sym>XDC</span></div>
+                <button type="button" class="btn btn-ghost" id="maxBtn" disabled>Max</button>
+              </div>
+              <p class="hint" id="unvoteHint">Connect or watch a staking address and look up a candidate.</p>
+            </div>
+            <p class="notice" id="ownerNote" data-tone="warn" hidden></p>
+            <div class="actions">
+              <button type="button" class="btn btn-primary" id="unvoteBtn" disabled>Unvote with MetaMask</button>
+              <button type="button" class="btn btn-ghost" id="unvotePrepBtn" disabled>Prepare unsigned transaction</button>
+            </div>
+            <div id="unvotePrep" hidden></div>
+            <p class="notice" id="unvoteMsg" hidden></p>
+          </div>
+        </section>
+
+        <!-- 5. Withdraw -->
+        <section class="group" id="withdraw" aria-labelledby="wd-title">
+          <div class="group-head">
+            <span class="step-no">5</span>
+            <h2 id="wd-title">Withdraw</h2>
+            <p>Unlocked stake is claimed back to the staking address. Each unvote (or resignation) is its own withdrawal.</p>
+          </div>
+          <div class="group-body">
+            <div class="actions" style="justify-content:space-between">
+              <span class="hint" id="wdSummary">Connect or watch a staking address to see its withdrawals.</span>
+              <button type="button" class="btn btn-ghost btn-small" id="wdRefresh" disabled>Refresh</button>
+            </div>
+            <div id="wdBody"></div>
+            <div id="wdPrep" hidden></div>
+            <p class="notice" id="wdMsg" hidden></p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <section class="know" id="know" aria-labelledby="know-title">
+      <div class="wrap">
+        <h2 id="know-title">Things to know</h2>
+        <div class="know-grid">
+          <div>
+            <h3>It talks to the system contract only</h3>
+            <p>Every read and transaction goes to the XDC validator contract at <code>xdc0000000000000000000000000000000000000088</code>, the same contract the official XDC Master dashboard uses. There’s no intermediary contract and nothing is held by XDC Outpost.</p>
+          </div>
+          <div>
+            <h3>Custody platforms and multisig</h3>
+            <p>Watch your staking address, then use “Prepare unsigned transaction” to get the exact destination, value and call data. Paste them into your custody platform’s contract-call screen or a multisig proposal. The withdrawal must be signed by the same address that unvoted.</p>
+          </div>
+          <div>
+            <h3>The unlock period</h3>
+            <p>Unvoted stake can be withdrawn after <span data-p="delay">the voter unlock period</span>. The block it unlocks at is fixed when you unvote, and the timing shown is an estimate from recent block times.</p>
+          </div>
+          <div>
+            <h3>Owner minimum stake</h3>
+            <p>The address that owns a node must keep at least <span data-p="minCand">the owner minimum</span> staked on it, so unvote can’t go below that. Recovering the owner stake means resigning the node, which takes it out of the candidate list.</p>
+          </div>
+          <div>
+            <h3>Rank is by stake, not a guarantee</h3>
+            <p>Candidates are ranked here by total stake against the <span data-p="slots">masternode</span> slots. The protocol can also leave out nodes penalised for missing blocks, so being in range by stake doesn’t guarantee a slot. Other candidates’ stakes move too, so leave a margin.</p>
+          </div>
+          <div>
+            <h3>Your choice of RPC</h3>
+            <p>Reads use the free public <a href="/go/plugin-rpc/?from=stake-desk" data-goatcounter-click="referral/plugin-rpc/stake-desk-know">Plugin XDC RPC</a> by default. Under Network settings you can switch to your own node or a private endpoint. It’s saved only in this browser.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="contact" id="contact" aria-labelledby="contact-title">
+      <div class="wrap">
+        <div>
+          <h2 id="contact-title">Running validators at scale?</h2>
+          <p>Questions about staking operations, a feature your team needs, or help setting up private RPC and node monitoring for your validators? Get in touch on whichever platform suits you.</p>
+        </div>
+        <ul class="channels">
+          <li><a href="https://t.me/s4njk4n" target="_blank" rel="noopener" data-goatcounter-click="contact/telegram"><svg aria-hidden="true"><use href="#i-telegram"/></svg><span class="name">Telegram</span><span class="handle">@s4njk4n</span></a></li>
+          <li><a href="https://discord.com/users/852434672793288724" target="_blank" rel="noopener" data-goatcounter-click="contact/discord"><svg aria-hidden="true"><use href="#i-discord"/></svg><span class="name">Discord</span><span class="handle">@s4njk4n</span></a></li>
+          <li><a href="https://x.com/s4njk4n" target="_blank" rel="noopener" data-goatcounter-click="contact/x"><svg aria-hidden="true"><use href="#i-x"/></svg><span class="name">X</span><span class="handle">@s4njk4n</span></a></li>
+          <li><a href="https://github.com/s4njk4n/XDC_Validator_Stake_Desk" target="_blank" rel="noopener" data-goatcounter-click="github/XDC_Validator_Stake_Desk"><svg aria-hidden="true"><use href="#i-github"/></svg><span class="name">GitHub</span><span class="handle">Validator Stake Desk</span></a></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>© <span id="year">2026</span> XDC Outpost, by <a href="https://github.com/s4njk4n?tab=repositories" target="_blank" rel="noopener" data-goatcounter-click="github/profile">s4njk4n</a>. Default RPC by <a href="/go/plugin-rpc/?from=stake-desk-footer" data-goatcounter-click="referral/plugin-rpc/stake-desk-footer">Plugin</a>.</p>
+      <p><a href="/">More XDC tools</a></p>
+    </div>
+  </footer>
+
+<script>
+(() => {
+"use strict";
+document.getElementById("year").textContent = new Date().getFullYear();
+
+/* ================= Config ================= */
+const VALIDATOR = "0x0000000000000000000000000000000000000088";
+const NETS = {
+  50: { name:"XDC Mainnet", hex:"0x32", symbol:"XDC", rpc:"https://rpc.plugin.global/xdcmainnet",
+        rpcNote:"Default: the free public Plugin RPC.", explorer:"https://xdcscan.com" },
+  51: { name:"XDC Apothem Testnet", hex:"0x33", symbol:"TXDC", rpc:"https://rpc.apothem.network",
+        rpcNote:"Default: the public Apothem RPC.", explorer:"https://testnet.xdcscan.com" },
+};
+const SEL = {
+  vote:"0x6dd7d8ea", unvote:"0x02aa9be2", withdraw:"0x441a3e70",
+  getCandidates:"0x06a49fce", getCandidateCap:"0x58e7525f", getCandidateOwner:"0xb642facd",
+  getVoterCap:"0x302b6872", isCandidate:"0xd51b9e93",
+  getWithdrawBlockNumbers:"0x2f9c4bba", getWithdrawCap:"0x15febd68",
+  minVoterCap:"0xf8ac9dd5", minCandidateCap:"0xd55b7dff", maxValidatorNumber:"0xd09f1ab4",
+  voterWithdrawDelay:"0xa9ff959e",
+};
+const STORE_KEY = "xdc-validator-stake-desk";
+
+/* ================= State ================= */
+const S = {
+  chainId: 50, rpcUrl: null, provider: null, account: null, mode: null /* "wallet" | "watch" */,
+  walletChain: null, params: null, blockTime: 2, node: null, nodeData: null, busy: false,
+};
+const $ = id => document.getElementById(id);
+const settings = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; } })();
+const saveSettings = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(settings)); } catch {} };
+const track = (name, title) => { try { window.xdcTrack && window.xdcTrack(name, title); } catch {} };
+
+/* ================= Helpers ================= */
+const WEI = 10n ** 18n;
+const strip0x = h => h.startsWith("0x") ? h.slice(2) : h;
+function normAddr(s){
+  s = (s || "").trim();
+  if (/^xdc/i.test(s)) s = "0x" + s.slice(3);
+  return /^0x[0-9a-fA-F]{40}$/.test(s) ? s.toLowerCase() : null;
+}
+const isZero = a => /^0x0{40}$/.test(a);
+const toXdc = a => a ? "xdc" + strip0x(a) : "";
+const short = a => { const x = toXdc(a); return x.slice(0, 9) + "…" + x.slice(-6); };
+const encAddr = a => strip0x(a).padStart(64, "0");
+const encUint = n => BigInt(n).toString(16).padStart(64, "0");
+const word = (hex, i) => strip0x(hex).slice(i * 64, (i + 1) * 64);
+const decUint = (hex, i = 0) => BigInt("0x" + (word(hex, i) || "0"));
+const decAddr = (hex, i = 0) => ("0x" + word(hex, i).slice(24)).toLowerCase();
+function decArray(hex, kind){
+  const h = strip0x(hex || ""); if (!h) return [];
+  const off = Number(BigInt("0x" + h.slice(0, 64))) / 32;
+  const len = Number(BigInt("0x" + h.slice(off * 64, off * 64 + 64)));
+  const out = [];
+  for (let i = 0; i < len; i++){
+    const w = h.slice((off + 1 + i) * 64, (off + 2 + i) * 64);
+    out.push(kind === "address" ? ("0x" + w.slice(24)).toLowerCase() : BigInt("0x" + w));
+  }
+  return out;
+}
+function parseXDC(str){
+  str = (str || "").replace(/[,\s_]/g, "");
+  if (!/^\d*(\.\d{0,18})?$/.test(str) || str === "" || str === ".") return null;
+  const [i, f = ""] = str.split(".");
+  return BigInt(i || "0") * WEI + BigInt((f + "0".repeat(18)).slice(0, 18));
+}
+const sym = () => NETS[S.chainId].symbol;
+function fmtNum(wei, dp = 2){
+  wei = BigInt(wei); const neg = wei < 0n; if (neg) wei = -wei;
+  const i = wei / WEI; const f = (wei % WEI).toString().padStart(18, "0").slice(0, dp).replace(/0+$/, "");
+  return (neg ? "-" : "") + i.toLocaleString("en-US") + (f ? "." + f : "");
+}
+const fmtXDC = (wei, dp = 2) => fmtNum(wei, dp) + " " + sym();
+const plainXDC = wei => { const i = wei / WEI, f = (wei % WEI).toString().padStart(18, "0").replace(/0+$/, ""); return i.toString() + (f ? "." + f : ""); };
+const ceilXDC = wei => ((BigInt(wei) + WEI - 1n) / WEI) * WEI;
+function fmtDuration(sec){
+  sec = Math.max(0, Math.round(sec));
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+  if (d) return h ? `${d} days ${h} h` : `${d} days`;
+  if (h) return `${h} h ${m} min`;
+  return `${Math.max(m, 1)} min`;
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+function notice(id, tone, html){
+  const el = $(id);
+  if (!tone){ el.hidden = true; el.innerHTML = ""; el.removeAttribute("data-tone"); return; }
+  el.hidden = false; el.innerHTML = html;
+  if (tone === "info") el.removeAttribute("data-tone"); else el.dataset.tone = tone;
+}
+const spin = text => `<span class="progress"><span class="spinner" aria-hidden="true"></span><span>${text}</span></span>`;
+const txLink = h => `<a class="hash" href="${NETS[S.chainId].explorer}/tx/${h}" target="_blank" rel="noopener">${h}</a>`;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function copyText(t, btn){
+  try { await navigator.clipboard.writeText(t); } catch {
+    const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch {} ta.remove();
+  }
+  if (btn){ const o = btn.textContent; btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1200); }
+}
+
+/* ================= RPC ================= */
+let rpcId = 1;
+async function postRpc(url, body){
+  const r = await fetch(url, { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify(body) });
+  if (!r.ok) throw new Error("RPC returned HTTP " + r.status);
+  return r.json();
+}
+// Reads go to the chosen RPC. If it can't be reached from the browser, fall back to the connected wallet on the same chain.
+async function rpc(method, params = []){
+  try {
+    const j = await postRpc(S.rpcUrl, { jsonrpc:"2.0", id:rpcId++, method, params });
+    if (j.error) throw Object.assign(new Error(j.error.message), { rpc:true });
+    return j.result;
+  } catch (e){
+    if (e.rpc) throw e;
+    if (S.mode === "wallet" && S.provider && S.walletChain === S.chainId) return S.provider.request({ method, params });
+    throw new Error(`couldn’t reach ${S.rpcUrl} (${e.message}). Try another RPC under Network settings.`);
+  }
+}
+const call = (data, from) => rpc("eth_call", [{ to:VALIDATOR, data, ...(from ? { from } : {}) }, "latest"]);
+
+async function multiCall(datas, onProgress){
+  const out = new Array(datas.length); let done = 0, batchOK = true;
+  const chunk = 40;
+  for (let s = 0; s < datas.length; s += chunk){
+    const slice = datas.slice(s, s + chunk);
+    if (batchOK){
+      try {
+        const body = slice.map((d, i) => ({ jsonrpc:"2.0", id:s + i + 1, method:"eth_call", params:[{ to:VALIDATOR, data:d }, "latest"] }));
+        const res = await postRpc(S.rpcUrl, body);
+        if (!Array.isArray(res)) throw 0;
+        const byId = new Map(res.map(r => [r.id, r]));
+        slice.forEach((_, i) => { const r = byId.get(s + i + 1); if (!r || r.error) throw 0; out[s + i] = r.result; });
+        done += slice.length; onProgress && onProgress(done, datas.length); continue;
+      } catch { batchOK = false; }
+    }
+    for (let i = 0; i < slice.length; i += 6){
+      const part = slice.slice(i, i + 6);
+      (await Promise.all(part.map(d => call(d)))).forEach((v, k) => out[s + i + k] = v);
+      done += part.length; onProgress && onProgress(done, datas.length);
+    }
+  }
+  return out;
+}
+
+function currentRpcFor(id){ return (settings.rpc && settings.rpc[id]) || NETS[id].rpc; }
+function renderRpcField(){
+  $("rpcIn").value = S.rpcUrl;
+  const def = NETS[S.chainId].rpc;
+  $("rpcHint").innerHTML = S.rpcUrl === def
+    ? `${NETS[S.chainId].rpcNote} ${S.chainId === 50 ? 'Need a private or dedicated endpoint? See <a href="/go/plugin-rpc/?from=stake-desk-settings" data-goatcounter-click="referral/plugin-rpc/stake-desk-settings">Plugin’s RPC plans</a>.' : ""}`
+    : `Custom endpoint, saved in this browser. <button type="button" class="copy" id="rpcReset">Reset to default</button>`;
+  const r = $("rpcReset"); if (r) r.onclick = () => applyRpc(def);
+}
+async function applyRpc(url){
+  url = (url || "").trim();
+  if (!/^https?:\/\/\S+$/i.test(url)){ notice("rpcStatus", "error", "Enter a full URL starting with https://"); return; }
+  notice("rpcStatus", "info", spin("Testing the endpoint…"));
+  try {
+    const j = await postRpc(url, { jsonrpc:"2.0", id:rpcId++, method:"eth_chainId", params:[] });
+    if (j.error) throw new Error(j.error.message);
+    const cid = Number(BigInt(j.result));
+    if (cid !== S.chainId){ notice("rpcStatus", "error", `That endpoint is on chain ${cid}, not ${NETS[S.chainId].name} (chain ${S.chainId}). Not applied.`); return; }
+    const b = await postRpc(url, { jsonrpc:"2.0", id:rpcId++, method:"eth_blockNumber", params:[] });
+    S.rpcUrl = url;
+    settings.rpc = settings.rpc || {};
+    if (url === NETS[S.chainId].rpc) delete settings.rpc[S.chainId]; else settings.rpc[S.chainId] = url;
+    saveSettings();
+    renderRpcField();
+    notice("rpcStatus", "ok", `Connected to chain ${cid} at block ${Number(BigInt(b.result)).toLocaleString()}.`);
+    track("stake-desk/rpc-" + (url === NETS[S.chainId].rpc ? "default" : "custom"));
+    S.params = null; await refreshAll();
+  } catch (e){
+    notice("rpcStatus", "error", `Couldn’t use that endpoint: ${esc(e.message)}. It may be down, or not allow requests from browsers (CORS).`);
+  }
+}
+
+/* ================= Contract parameters ================= */
+async function loadParams(){
+  const [minV, minC, maxN, delay, blk] = await Promise.all([
+    call(SEL.minVoterCap), call(SEL.minCandidateCap), call(SEL.maxValidatorNumber),
+    call(SEL.voterWithdrawDelay), rpc("eth_blockNumber"),
+  ]);
+  S.params = { minVoter:decUint(minV), minCandidate:decUint(minC), maxValidators:Number(decUint(maxN)),
+               voterDelay:Number(decUint(delay)), block:Number(BigInt(blk)) };
+  try {
+    const b = S.params.block, back = 2000;
+    const [a, z] = await Promise.all([
+      rpc("eth_getBlockByNumber", ["0x" + (b - back).toString(16), false]),
+      rpc("eth_getBlockByNumber", ["0x" + b.toString(16), false]),
+    ]);
+    const bt = (Number(BigInt(z.timestamp)) - Number(BigInt(a.timestamp))) / back;
+    if (bt > 0.5 && bt < 30) S.blockTime = bt;
+  } catch {}
+  renderParams();
+}
+function renderParams(){
+  const p = S.params; if (!p) return;
+  const delayTxt = `${p.voterDelay.toLocaleString()} blocks (about ${fmtDuration(p.voterDelay * S.blockTime)})`;
+  document.querySelectorAll('[data-p="minVote"]').forEach(e => e.textContent = fmtXDC(p.minVoter, 0));
+  document.querySelectorAll('[data-p="minCand"]').forEach(e => e.textContent = fmtXDC(p.minCandidate, 0));
+  document.querySelectorAll('[data-p="delay"]').forEach(e => e.textContent = delayTxt);
+  document.querySelectorAll('[data-p="slots"]').forEach(e => e.textContent = String(p.maxValidators));
+  document.querySelectorAll("[data-sym]").forEach(e => e.textContent = sym());
+  $("voteAmt").placeholder = plainXDC(p.minVoter);
+}
+async function refreshBlock(){
+  try { S.params.block = Number(BigInt(await rpc("eth_blockNumber"))); } catch {}
+}
+
+/* ================= Wallet ================= */
+const discovered = [];
+window.addEventListener("eip6963:announceProvider", e => discovered.push(e.detail));
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+function pickProvider(){
+  const mm = discovered.find(d => d.info && d.info.rdns === "io.metamask");
+  if (mm) return mm.provider;
+  if (window.ethereum){
+    if (Array.isArray(window.ethereum.providers)) return window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum.providers[0];
+    return window.ethereum;
+  }
+  return discovered[0] ? discovered[0].provider : null;
+}
+async function connect(){
+  const prov = pickProvider();
+  if (!prov){ $("noWallet").hidden = false; return; }
+  S.provider = prov;
+  try {
+    const accts = await prov.request({ method:"eth_requestAccounts" });
+    S.walletChain = Number(BigInt(await prov.request({ method:"eth_chainId" })));
+    if (S.walletChain !== S.chainId){ try { await switchChain(); } catch {} }
+    attachListeners();
+    S.mode = "wallet"; settings.mode = "wallet"; delete settings.watch; saveSettings();
+    await setAccount(accts && accts[0]);
+    track("stake-desk/connected");
+  } catch (e){
+    if (e && e.code === 4001) return;
+    notice("nodeMsg", "error", "Wallet error: " + esc(e.message || e));
+  }
+}
+let listening = false;
+function attachListeners(){
+  if (listening || !S.provider || !S.provider.on) return;
+  listening = true;
+  S.provider.on("accountsChanged", a => { if (S.mode === "wallet") setAccount(a && a[0]); });
+  S.provider.on("chainChanged", c => { S.walletChain = Number(BigInt(c)); renderWallet(); refreshAll(); });
+}
+async function switchChain(){
+  const n = NETS[S.chainId];
+  try {
+    await S.provider.request({ method:"wallet_switchEthereumChain", params:[{ chainId:n.hex }] });
+  } catch (e){
+    const code = e.code || (e.data && e.data.originalError && e.data.originalError.code);
+    if (code === 4902){
+      await S.provider.request({ method:"wallet_addEthereumChain", params:[{
+        chainId:n.hex, chainName:n.name, nativeCurrency:{ name:"XDC", symbol:n.symbol, decimals:18 },
+        rpcUrls:[S.rpcUrl], blockExplorerUrls:[n.explorer] }] });
+    } else if (code !== 4001) throw e;
+  }
+  S.walletChain = Number(BigInt(await S.provider.request({ method:"eth_chainId" })));
+}
+function watch(){
+  const a = normAddr($("watchIn").value);
+  if (!a){ $("watchIn").setAttribute("aria-invalid", "true"); $("watchIn").focus(); return; }
+  $("watchIn").removeAttribute("aria-invalid");
+  S.mode = "watch"; settings.mode = "watch"; settings.watch = a; saveSettings();
+  track("stake-desk/watch");
+  setAccount(a);
+}
+function disconnect(){
+  S.mode = null; S.account = null; delete settings.mode; delete settings.watch; saveSettings();
+  renderWallet(); refreshAll();
+}
+async function setAccount(a){
+  S.account = a ? a.toLowerCase() : null;
+  if (!S.account) S.mode = null;
+  await renderWallet();
+  await refreshAll();
+}
+const canSign = () => S.mode === "wallet" && S.account && S.provider && S.walletChain === S.chainId;
+async function renderWallet(){
+  const st = $("walletState"), txt = $("walletText");
+  $("connectBtn").hidden = S.mode === "wallet";
+  $("disconnectBtn").hidden = !S.mode;
+  $("switchBtn").hidden = true;
+  st.className = "wallet-state";
+  if (!S.account){ txt.textContent = "Not connected"; updateButtons(); return; }
+  let bal = "";
+  try { bal = fmtXDC(BigInt(await rpc("eth_getBalance", [S.account, "latest"])), 2); } catch {}
+  if (S.mode === "watch"){
+    st.classList.add("watch");
+    txt.innerHTML = `Watching <code>${toXdc(S.account)}</code>${bal ? ` · ${bal}` : ""} <span class="kind kind-quiet">Read-only</span>`;
+    $("connectBtn").textContent = "Connect MetaMask instead";
+  } else {
+    const right = S.walletChain === S.chainId;
+    st.classList.add(right ? "on" : "bad");
+    txt.innerHTML = `<code>${toXdc(S.account)}</code>${bal ? ` · ${bal}` : ""}` + (right ? "" : ` <span class="kind kind-flare">Wrong network</span>`);
+    $("switchBtn").hidden = right;
+    $("switchBtn").textContent = "Switch to " + NETS[S.chainId].name;
+  }
+  updateButtons();
+}
+
+/* ================= Candidate ================= */
+async function lookup(){
+  const a = normAddr($("nodeIn").value);
+  notice("nodeMsg");
+  if (!a){ $("nodeIn").setAttribute("aria-invalid", "true"); notice("nodeMsg", "error", "That isn’t a valid address. It should be <span class=mono>xdc</span> or <span class=mono>0x</span> followed by 40 hex characters."); return; }
+  $("nodeIn").removeAttribute("aria-invalid");
+  S.node = a;
+  try { const u = new URL(location.href); u.searchParams.set("node", toXdc(a)); history.replaceState(null, "", u); } catch {}
+  $("lookupBtn").disabled = true;
+  try { await loadNode(); rankNode(); track("stake-desk/lookup"); }
+  catch (e){ notice("nodeMsg", "error", "Couldn’t read the candidate: " + esc(e.message || e)); }
+  finally { $("lookupBtn").disabled = false; }
+}
+async function loadNode(){
+  if (!S.node) return;
+  const a = S.node;
+  const [isC, cap, owner, mine] = await Promise.all([
+    call(SEL.isCandidate + encAddr(a)), call(SEL.getCandidateCap + encAddr(a)), call(SEL.getCandidateOwner + encAddr(a)),
+    S.account ? call(SEL.getVoterCap + encAddr(a) + encAddr(S.account)) : Promise.resolve(null),
+  ]);
+  const prev = S.nodeData && S.nodeData.addr === a ? S.nodeData : {};
+  S.nodeData = { addr:a, isCandidate: decUint(isC) !== 0n, cap: decUint(cap), owner: decAddr(owner),
+                 mine: mine === null ? null : decUint(mine), rank:prev.rank ?? null, total:prev.total ?? null,
+                 needed:prev.needed ?? null, cushion:prev.cushion ?? null };
+  renderNode();
+}
+function renderNode(){
+  const d = S.nodeData, p = S.params; if (!d || !p) return;
+  $("nodeCard").hidden = false;
+  $("nCapBig").innerHTML = `${fmtNum(d.cap, 0)}<span class="unit">${sym()}</span>`;
+  let status;
+  if (!d.isCandidate) status = `<span class="kind kind-flare">Not a candidate</span>`;
+  else if (d.rank == null) status = `<span class="kind kind-quiet">Candidate</span>`;
+  else if (d.rank <= p.maxValidators) status = `<span class="kind kind-ok">In the masternode set by stake</span>`;
+  else status = `<span class="kind kind-flare">Standby</span>`;
+  $("nStatus").innerHTML = status;
+  $("nRankLine").textContent = d.rank ? `Rank ${d.rank} of ${d.total}` : (d.isCandidate ? "Ranking candidates…" : "");
+  $("nRank").textContent = d.rank ? `${d.rank} of ${d.total}` : (d.isCandidate ? "Calculating…" : "—");
+  $("nSlots").textContent = String(p.maxValidators);
+  if (d.rank && d.isCandidate){
+    if (d.rank <= p.maxValidators){
+      $("nGapLabel").textContent = "Lead over first standby";
+      $("nGap").innerHTML = d.cushion != null ? fmtXDC(d.cushion, 0) : "—";
+    } else {
+      $("nGapLabel").textContent = "Needed to enter the set";
+      $("nGap").innerHTML = `${fmtXDC(ceilXDC(d.needed), 0)}<span class="sub">at current stakes; leave a margin</span>`;
+    }
+  } else { $("nGapLabel").textContent = "Distance to the set"; $("nGap").textContent = "—"; }
+  $("nMine").innerHTML = d.mine == null ? `<span class="sub">Connect or watch a staking address</span>` : fmtXDC(d.mine, 2);
+  $("nOwner").innerHTML = !isZero(d.owner) ? toXdc(d.owner) + (S.account === d.owner ? `<span class="sub">This is your staking address</span>` : "") : "—";
+  $("nodeExplorer").href = NETS[S.chainId].explorer + "/address/" + d.addr;
+
+  if (!d.isCandidate){
+    notice("nodeMsg", "warn", d.mine && d.mine > 0n
+      ? "This address isn’t an active candidate (it may have resigned). You can’t vote for it, but you can still unvote your stake."
+      : "This address isn’t a registered candidate. Check you’ve entered the node’s candidate (coinbase) address, not the owner’s wallet.");
+  } else notice("nodeMsg");
+  updateButtons();
+}
+let rankToken = 0;
+async function rankNode(){
+  const d = S.nodeData; if (!d || !d.isCandidate) return;
+  const my = ++rankToken, meter = $("rankMeter"), bar = meter.firstElementChild;
+  meter.hidden = false; bar.style.width = "0";
+  try {
+    const raw = decArray(await call(SEL.getCandidates), "address");
+    const list = [...new Set(raw.filter(a => !isZero(a)))];
+    const caps = await multiCall(list.map(a => SEL.getCandidateCap + encAddr(a)), (n, t) => { if (my === rankToken) bar.style.width = (100 * n / t) + "%"; });
+    if (my !== rankToken) return;
+    const rows = list.map((a, i) => ({ a, cap: decUint(caps[i]) })).filter(r => r.cap > 0n);
+    rows.sort((x, y) => (y.cap > x.cap) ? 1 : (y.cap < x.cap ? -1 : 0));
+    const idx = rows.findIndex(r => r.a === d.addr), N = S.params.maxValidators;
+    d.total = rows.length; d.rank = idx >= 0 ? idx + 1 : null; d.needed = null; d.cushion = null;
+    if (d.rank && d.rank > N && rows[N - 1]) d.needed = rows[N - 1].cap - d.cap + 1n;
+    if (d.rank && d.rank <= N && rows[N]) d.cushion = d.cap - rows[N].cap;
+    renderNode();
+  } catch (e){
+    $("nRankLine").textContent = "Couldn’t rank candidates right now.";
+  } finally { meter.hidden = true; }
+}
+
+/* ================= Validation & buttons ================= */
+function maxUnvote(){
+  const d = S.nodeData; if (!d || d.mine == null) return 0n;
+  if (S.account && d.owner === S.account){ const m = d.mine - S.params.minCandidate; return m > 0n ? m : 0n; }
+  return d.mine;
+}
+function voteCheck(){
+  const d = S.nodeData, p = S.params, v = parseXDC($("voteAmt").value);
+  if (!d) return { ok:false, hint:"Look up a candidate first." };
+  if (!d.isCandidate) return { ok:false, hint:"This address isn’t an active candidate." };
+  if (!v) return { ok:false, hint:`Minimum ${fmtXDC(p.minVoter, 0)} per vote.` };
+  if (v < p.minVoter) return { ok:false, hint:`Below the minimum of ${fmtXDC(p.minVoter, 0)}.`, bad:true };
+  return { ok:true, v, hint:`Votes ${fmtXDC(v, 4)} for ${short(d.addr)}.` };
+}
+function unvoteCheck(){
+  const d = S.nodeData, u = parseXDC($("unvoteAmt").value);
+  if (!d || !S.account) return { ok:false, hint:"Connect or watch a staking address and look up a candidate." };
+  const mx = maxUnvote();
+  if (d.mine === 0n) return { ok:false, hint:"This address has no stake on this candidate." };
+  if (!u || u === 0n) return { ok:false, hint:`You can unvote up to ${fmtXDC(mx, 2)}.` };
+  if (u > mx) return { ok:false, hint:`More than the ${fmtXDC(mx, 2)} you can unvote.`, bad:true };
+  return { ok:true, u, hint:`Unlocks around block ${(S.params.block + S.params.voterDelay).toLocaleString()}, about ${fmtDuration(S.params.voterDelay * S.blockTime)} from now.` };
+}
+function updateButtons(){
+  if (!S.params) return;
+  const vc = voteCheck(), uc = unvoteCheck(), sign = canSign();
+  $("voteHint").textContent = vc.hint; $("voteAmt").toggleAttribute("aria-invalid", !!vc.bad);
+  $("voteBtn").disabled = !(vc.ok && sign) || S.busy;
+  $("votePrepBtn").disabled = !vc.ok;
+  $("unvoteHint").textContent = uc.hint; $("unvoteAmt").toggleAttribute("aria-invalid", !!uc.bad);
+  $("unvoteBtn").disabled = !(uc.ok && sign) || S.busy;
+  $("unvotePrepBtn").disabled = !uc.ok;
+  $("maxBtn").disabled = !(S.nodeData && maxUnvote() > 0n);
+  $("wdRefresh").disabled = !S.account;
+  const d = S.nodeData;
+  const isOwner = d && S.account && d.owner === S.account;
+  notice("ownerNote", isOwner ? "warn" : null, isOwner
+    ? `This address owns the node, so at least ${fmtXDC(S.params.minCandidate, 0)} has to stay staked. Recovering that requires resigning the node.` : "");
+  const signLabel = S.mode === "watch" ? "Sign with MetaMask (connect first)" : null;
+  $("voteBtn").textContent = signLabel || "Vote with MetaMask";
+  $("unvoteBtn").textContent = signLabel || "Unvote with MetaMask";
+}
+
+/* ================= Prepared (unsigned) transactions ================= */
+function prepHtml(title, fn, args, data, value){
+  const rows = [
+    ["To", toXdc(VALIDATOR), `${VALIDATOR} · XDC validator contract`, VALIDATOR],
+    ["Value", value.toString(), `In wei. Equals ${fmtXDC(value, 18)}`, value.toString()],
+    ["Function", `${fn}(${args.map(a => a[0]).join(", ")})`, args.map(a => `${a[0]}: ${a[1]}`).join(" · "), null],
+    ["Data", data, "Call data (hex)", data],
+  ];
+  return `<div class="txprep"><h3>${esc(title)}</h3><dl>` + rows.map(([k, v, s, c]) =>
+    `<dt>${k}</dt><dd>${esc(v)}<small>${esc(s)}</small></dd><dd>${c != null ? `<button type="button" class="copy" data-copy="${esc(c)}">Copy</button>` : ""}</dd>`).join("") +
+    `</dl><p class="hint">Network: ${NETS[S.chainId].name} (chain ID ${S.chainId}). ${S.account ? `Sign from <span class="mono">${short(S.account)}</span>. ` : ""}Use your platform’s contract-call or raw-transaction option. Gas around 150,000 is plenty.</p>` +
+    `<div class="actions"><button type="button" class="btn btn-ghost btn-small" data-copy-json='${esc(JSON.stringify({ chainId:S.chainId, to:VALIDATOR, value:"0x" + value.toString(16), data, ...(S.account ? { from:S.account } : {}) }))}'>Copy as JSON</button></div></div>`;
+}
+function showPrep(id, html){
+  const el = $(id); el.hidden = false; el.innerHTML = html;
+  el.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => copyText(b.dataset.copy, b));
+  el.querySelectorAll("[data-copy-json]").forEach(b => b.onclick = () => copyText(JSON.stringify(JSON.parse(b.dataset.copyJson), null, 2), b));
+}
+$("votePrepBtn").onclick = () => {
+  const c = voteCheck(); if (!c.ok) return;
+  showPrep("votePrep", prepHtml("Unsigned vote transaction", "vote", [["candidate", toXdc(S.node)]], SEL.vote + encAddr(S.node), c.v));
+  track("stake-desk/prepare-vote");
+};
+$("unvotePrepBtn").onclick = () => {
+  const c = unvoteCheck(); if (!c.ok) return;
+  showPrep("unvotePrep", prepHtml("Unsigned unvote transaction", "unvote", [["candidate", toXdc(S.node)], ["amount", `${c.u} wei (${fmtXDC(c.u, 4)})`]], SEL.unvote + encAddr(S.node) + encUint(c.u), 0n));
+  track("stake-desk/prepare-unvote");
+};
+
+/* ================= Sending ================= */
+function revertText(kind){
+  const p = S.params;
+  return {
+    vote: `The contract would reject this vote. Check the node is an active candidate and the amount is at least ${fmtXDC(p.minVoter, 0)}.`,
+    unvote: `The contract would reject this unvote. You can’t unvote more than your stake` + (S.nodeData && S.nodeData.owner === S.account ? `, and as owner you must leave ${fmtXDC(p.minCandidate, 0)}.` : "."),
+    withdraw: "The contract would reject this withdrawal. It may not be unlocked yet, or it’s already been withdrawn. Refresh the list.",
+  }[kind];
+}
+async function sendTx(kind, data, value, msgId){
+  if (!canSign()){ notice(msgId, "error", `Connect MetaMask on ${NETS[S.chainId].name} to sign here, or use “Prepare unsigned transaction”.`); return null; }
+  const tx = { from:S.account, to:VALIDATOR, data, value:"0x" + (value || 0n).toString(16) };
+  S.busy = true; updateButtons();
+  try {
+    notice(msgId, "info", spin("Checking the transaction against the contract…"));
+    try {
+      const g = await S.provider.request({ method:"eth_estimateGas", params:[tx] });
+      tx.gas = "0x" + (BigInt(g) * 13n / 10n).toString(16);
+    } catch (e){
+      const m = ((e && e.message) || "").toLowerCase();
+      notice(msgId, "error", m.includes("insufficient funds") ? "Not enough XDC to cover the amount plus gas." : revertText(kind));
+      return null;
+    }
+    notice(msgId, "info", spin("Confirm the transaction in MetaMask…"));
+    const hash = await S.provider.request({ method:"eth_sendTransaction", params:[tx] });
+    track("stake-desk/" + kind + "-sent");
+    notice(msgId, "info", spin("Submitted. Waiting for confirmation…") + `<div>${txLink(hash)}</div>`);
+    for (let i = 0; i < 90; i++){
+      await sleep(2000);
+      let rc = null; try { rc = await rpc("eth_getTransactionReceipt", [hash]); } catch {}
+      if (rc){
+        if (rc.status === "0x1"){ notice(msgId, "ok", `<strong>Confirmed.</strong> ${txLink(hash)}`); return hash; }
+        notice(msgId, "error", `<strong>Failed on chain.</strong> ${revertText(kind)}<div>${txLink(hash)}</div>`); return null;
+      }
+    }
+    notice(msgId, "warn", `Still pending. Follow it on XDCScan: ${txLink(hash)}`);
+    return hash;
+  } catch (e){
+    notice(msgId, "error", e && e.code === 4001 ? "Transaction rejected in MetaMask." : "Error: " + esc(e.message || e));
+    return null;
+  } finally { S.busy = false; updateButtons(); }
+}
+$("voteBtn").onclick = async () => {
+  const c = voteCheck(); if (!c.ok) return;
+  if (!confirm(`Vote ${fmtXDC(c.v, 4)} for candidate\n${toXdc(S.node)}?`)) return;
+  if (await sendTx("vote", SEL.vote + encAddr(S.node), c.v, "voteMsg")){ $("voteAmt").value = ""; $("votePrep").hidden = true; await refreshAll(); }
+};
+$("unvoteBtn").onclick = async () => {
+  const c = unvoteCheck(); if (!c.ok) return;
+  if (!confirm(`Unvote ${fmtXDC(c.u, 4)} from candidate\n${toXdc(S.node)}?\n\nIt will be locked for about ${fmtDuration(S.params.voterDelay * S.blockTime)}, then you can withdraw it here.`)) return;
+  if (await sendTx("unvote", SEL.unvote + encAddr(S.node) + encUint(c.u), 0n, "unvoteMsg")){ $("unvoteAmt").value = ""; $("unvotePrep").hidden = true; await refreshAll(); }
+};
+
+/* ================= Withdrawals ================= */
+async function loadWithdrawals(){
+  const body = $("wdBody"), sum = $("wdSummary");
+  $("wdPrep").hidden = true;
+  if (!S.account){ body.innerHTML = ""; sum.textContent = "Connect or watch a staking address to see its withdrawals."; return; }
+  sum.innerHTML = spin("Loading withdrawals…");
+  try {
+    // getWithdrawBlockNumbers / getWithdrawCap read msg.sender, so the call is made "from" the staking address.
+    const nums = decArray(await call(SEL.getWithdrawBlockNumbers, S.account), "uint");
+    const seen = new Set(), entries = [];
+    nums.forEach((bn, index) => { if (bn === 0n || seen.has(bn)) return; seen.add(bn); entries.push({ bn, index }); });
+    const caps = await Promise.all(entries.map(e => call(SEL.getWithdrawCap + encUint(e.bn), S.account)));
+    const rows = entries.map((e, i) => ({ ...e, cap: decUint(caps[i]) })).filter(r => r.cap > 0n).sort((a, b) => a.bn < b.bn ? -1 : 1);
+    await refreshBlock();
+    if (!rows.length){ body.innerHTML = ""; sum.innerHTML = `No pending withdrawals for <span class="mono">${short(S.account)}</span>.`; return; }
+    const cur = BigInt(S.params.block);
+    const total = rows.reduce((s, r) => s + r.cap, 0n), ready = rows.filter(r => r.bn <= cur).reduce((s, r) => s + r.cap, 0n);
+    sum.innerHTML = `<strong>${fmtXDC(total, 2)}</strong> pending, <strong>${fmtXDC(ready, 2)}</strong> ready to withdraw.`;
+    const sign = canSign();
+    body.innerHTML = `<table class="wd"><thead><tr><th>Amount</th><th>Unlock block</th><th>Status</th><th>Action</th></tr></thead><tbody>` +
+      rows.map(r => {
+        const left = r.bn - cur, isReady = left <= 0n;
+        return `<tr><td><strong>${fmtXDC(r.cap, 2)}</strong></td><td class="mono">${r.bn.toLocaleString()}</td>
+          <td>${isReady ? `<span class="kind kind-ok">Unlocked</span>` : `<span class="kind kind-quiet">${Number(left).toLocaleString()} blocks · about ${fmtDuration(Number(left) * S.blockTime)}</span>`}</td>
+          <td><span class="acts">
+            <button type="button" class="btn btn-primary btn-small" data-wd="${r.bn}" data-idx="${r.index}" ${isReady && sign ? "" : "disabled"}>Withdraw</button>
+            <button type="button" class="btn btn-ghost btn-small" data-prep="${r.bn}" data-idx="${r.index}" data-cap="${r.cap}" ${isReady ? "" : "disabled"} title="Unsigned transaction for a custody platform">Prepare</button>
+          </span></td></tr>`;
+      }).join("") + `</tbody></table>`;
+    body.querySelectorAll("[data-wd]").forEach(b => b.onclick = async () => {
+      if (await sendTx("withdraw", SEL.withdraw + encUint(b.dataset.wd) + encUint(b.dataset.idx), 0n, "wdMsg")) await refreshAll();
+    });
+    body.querySelectorAll("[data-prep]").forEach(b => b.onclick = () => {
+      const bn = BigInt(b.dataset.prep), idx = Number(b.dataset.idx);
+      showPrep("wdPrep", prepHtml(`Unsigned withdrawal of ${fmtXDC(BigInt(b.dataset.cap), 2)}`, "withdraw",
+        [["blockNumber", bn.toString()], ["index", String(idx)]], SEL.withdraw + encUint(bn) + encUint(idx), 0n));
+      track("stake-desk/prepare-withdraw");
+    });
+  } catch (e){
+    body.innerHTML = ""; sum.textContent = "Couldn’t load withdrawals: " + (e.message || e);
+  }
+}
+
+/* ================= Refresh ================= */
+async function refreshAll(){
+  try { if (!S.params) await loadParams(); else await refreshBlock(); }
+  catch (e){ notice("nodeMsg", "error", "Couldn’t reach the network: " + esc(e.message || e)); return; }
+  const tasks = [loadWithdrawals()];
+  if (S.node) tasks.push(loadNode().then(rankNode).catch(e => notice("nodeMsg", "error", esc(e.message || e))));
+  await Promise.all(tasks);
+  updateButtons();
+}
+
+/* ================= Init ================= */
+function setNetwork(id){
+  S.chainId = id; S.rpcUrl = currentRpcFor(id); S.params = null; S.nodeData = null; rankToken++;
+  $("netSel").value = String(id);
+  $("nodeCard").hidden = true;
+  $("heroContract").textContent = toXdc(VALIDATOR).slice(0, 7) + "…" + VALIDATOR.slice(-4);
+  ["votePrep", "unvotePrep", "wdPrep"].forEach(x => $(x).hidden = true);
+  settings.net = id; saveSettings();
+  renderRpcField(); notice("rpcStatus");
+}
+$("netSel").onchange = async e => {
+  setNetwork(Number(e.target.value));
+  if (S.mode === "wallet" && S.provider){ try { await switchChain(); } catch {} }
+  await renderWallet(); await refreshAll();
+};
+$("rpcBtn").onclick = () => applyRpc($("rpcIn").value);
+$("rpcIn").addEventListener("keydown", e => { if (e.key === "Enter") applyRpc($("rpcIn").value); });
+$("connectBtn").onclick = connect;
+$("disconnectBtn").onclick = disconnect;
+$("switchBtn").onclick = async () => { try { await switchChain(); } catch {} renderWallet(); refreshAll(); };
+$("watchBtn").onclick = watch;
+$("watchIn").addEventListener("keydown", e => { if (e.key === "Enter") watch(); });
+$("lookupBtn").onclick = lookup;
+$("nodeIn").addEventListener("keydown", e => { if (e.key === "Enter") lookup(); });
+$("voteAmt").addEventListener("input", () => { $("votePrep").hidden = true; updateButtons(); });
+$("unvoteAmt").addEventListener("input", () => { $("unvotePrep").hidden = true; updateButtons(); });
+$("maxBtn").onclick = () => { $("unvoteAmt").value = plainXDC(maxUnvote()); $("unvotePrep").hidden = true; updateButtons(); };
+$("wdRefresh").onclick = loadWithdrawals;
+$("copyLinkBtn").onclick = e => copyText(location.href, e.currentTarget);
+$("mmDeepLink").href = "https://metamask.app.link/dapp/" + location.host + location.pathname + location.search;
+
+(async function init(){
+  const q = new URLSearchParams(location.search);
+  const net = Number(q.get("net") || settings.net || 50);
+  setNetwork(NETS[net] ? net : 50);
+  renderWallet();
+  try { await loadParams(); } catch (e){
+    notice("nodeMsg", "error", "Couldn’t reach the RPC: " + esc(e.message || e));
+    $("netSettings").open = true;
+  }
+  const n = q.get("node");
+  if (n){ $("nodeIn").value = n; lookup(); }
+  await sleep(150);
+  if (settings.mode === "watch" && settings.watch){
+    $("watchIn").value = toXdc(settings.watch); S.mode = "watch"; await setAccount(settings.watch);
+  } else if (settings.mode === "wallet"){
+    const prov = pickProvider();
+    if (prov){
+      try {
+        const accts = await prov.request({ method:"eth_accounts" });
+        if (accts && accts.length){
+          S.provider = prov; S.mode = "wallet";
+          S.walletChain = Number(BigInt(await prov.request({ method:"eth_chainId" })));
+          attachListeners(); await setAccount(accts[0]);
+        }
+      } catch {}
+    }
+  }
+  if (!pickProvider() && /Mobi|Android/i.test(navigator.userAgent)) $("noWallet").hidden = false;
+  setInterval(() => { if (S.params && !document.hidden) refreshBlock().then(updateButtons); }, 30000);
+})();
+})();
+</script>
+</body>
+</html>
